@@ -426,14 +426,13 @@
       ctx.fill();
     }
 
-    // Draw daytime forecast (8am-8pm, 12 hours)
+    // Draw daytime forecast (8am-8pm, 12 hours) - artistic version
     function drawDaytime(b) {
       if (b < 2 || hourlyForecast.length === 0) return;
 
       const breath = Math.sin(breathPhase * 0.5) * 0.5 + 0.5;
       const textBrightness = Math.floor(Math.min(b, 12) + breath);
 
-      // Find 8am index, if before 8am start from next day
       const now = new Date();
       const currentHour = now.getHours();
 
@@ -445,64 +444,138 @@
           daytimeData.push(h);
         }
       }
-      // If not enough 8am-8pm data, just use what we have
       if (daytimeData.length === 0) {
         daytimeData = hourlyForecast.slice(0, 12);
       }
-      daytimeData = daytimeData.slice(0, 12); // Max 12 hours
+      daytimeData = daytimeData.slice(0, 12);
 
-      // Title with current time
-      ctx.font = '8px "IBM Plex Mono", monospace';
-      ctx.textAlign = 'center';
-      ctx.fillStyle = gray(textBrightness - 4);
-      ctx.fillText(`日间天气 ${now.getMonth()+1}/${now.getDate()}日`, 128, 8);
+      // === SKY GRADIENT BACKGROUND ===
+      // Simulate sky with gradient layers
+      for (let y = 0; y < 64; y++) {
+        const skyLevel = Math.floor(15 - (y / 64) * 10);
+        ctx.fillStyle = gray(skyLevel);
+        ctx.fillRect(0, y, 256, 1);
+      }
 
-      // Time axis (bottom)
-      const colWidth = 21;
-      const startX = 0;
-      const chartY = 52;
-      const chartHeight = 10;
+      // === SUN/MOON VISUALIZATION (based on current hour) ===
+      // Draw sun arc from 8am to 8pm
+      const sunX = 30;
+      const sunY = 28;
+      const sunRadius = 8;
 
-      // Draw timeline for each hour
+      // Sun position follows arc (8am = east, 12pm = top, 8pm = west)
+      const progress = (currentHour - 8) / 12; // 0 to 1
+      const sunArcY = Math.sin(progress * Math.PI) * 15;
+      const actualSunY = sunY - sunArcY;
+
+      // Sun glow (outer)
+      const glowRadius = sunRadius + 4 + Math.floor(breath * 2);
+      for (let r = glowRadius; r > sunRadius; r--) {
+        const alpha = Math.floor((glowRadius - r) * 1.5);
+        ctx.fillStyle = gray(Math.max(textBrightness - alpha, 3));
+        ctx.beginPath();
+        ctx.arc(sunX, actualSunY, r, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // Sun core
+      ctx.fillStyle = gray(textBrightness + 2);
+      ctx.beginPath();
+      ctx.arc(sunX, actualSunY, sunRadius, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Sun rays
+      const rayCount = 8;
+      const rayLength = 4 + Math.floor(breath * 2);
+      for (let i = 0; i < rayCount; i++) {
+        const angle = (i / rayCount) * Math.PI * 2 + breathPhase * 0.2;
+        const x1 = sunX + Math.cos(angle) * (sunRadius + 2);
+        const y1 = actualSunY + Math.sin(angle) * (sunRadius + 2);
+        const x2 = sunX + Math.cos(angle) * (sunRadius + rayLength);
+        const y2 = actualSunY + Math.sin(angle) * (sunRadius + rayLength);
+        ctx.strokeStyle = gray(textBrightness);
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2, y2);
+        ctx.stroke();
+      }
+
+      // === RAIN VISUALIZATION ===
+      // If there's rain probability, draw animated rain drops
+      const avgRainProb = daytimeData.reduce((sum, h) => sum + h.rain_prob, 0) / daytimeData.length;
+      if (avgRainProb > 20) {
+        const dropCount = Math.floor(avgRainProb / 10);
+        for (let i = 0; i < dropCount; i++) {
+          const dropX = 200 + (i * 17) % 50;
+          const dropY = (Math.floor(breathPhase * 10 + i * 7) % 40) + 10;
+          const dropLen = 3 + (i % 3);
+          ctx.fillStyle = gray(textBrightness - 4);
+          ctx.fillRect(dropX, dropY, 1, dropLen);
+        }
+      }
+
+      // === TEMPERATURE CURVE ===
+      // Draw smooth temperature curve
+      const tempMin = Math.min(...daytimeData.map(h => h.temp));
+      const tempMax = Math.max(...daytimeData.map(h => h.temp));
+      const tempRange = tempMax - tempMin || 1;
+
+      ctx.strokeStyle = gray(textBrightness - 2);
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+
       for (let i = 0; i < daytimeData.length; i++) {
         const h = daytimeData[i];
-        const x = startX + i * colWidth;
+        const x = 55 + i * 17;
+        const tempY = 45 - ((h.temp - tempMin) / tempRange) * 25;
 
-        // Time label
-        ctx.font = '6px "IBM Plex Mono", monospace';
-        ctx.fillStyle = gray(textBrightness - 5);
-        ctx.textAlign = 'center';
-        ctx.fillText(`${h.hour}`, x + colWidth/2, chartY + chartHeight + 5);
+        if (i === 0) {
+          ctx.moveTo(x, tempY);
+        } else {
+          ctx.lineTo(x, tempY);
+        }
+      }
+      ctx.stroke();
 
-        // Rain probability bar (from bottom)
-        const rainHeight = Math.round((h.rain_prob / 100) * chartHeight);
-        ctx.fillStyle = gray(textBrightness - 3);
-        ctx.fillRect(x + 2, chartY + chartHeight - rainHeight, colWidth - 4, rainHeight);
+      // Temperature dots and labels
+      for (let i = 0; i < daytimeData.length; i++) {
+        const h = daytimeData[i];
+        const x = 55 + i * 17;
+        const tempY = 45 - ((h.temp - tempMin) / tempRange) * 25;
 
-        // Temperature (above bar)
-        ctx.font = 'bold 8px "IBM Plex Mono", monospace';
+        // Dot on curve
         ctx.fillStyle = gray(textBrightness);
-        ctx.textAlign = 'center';
-        ctx.fillText(`${h.temp}°`, x + colWidth/2, chartY - 2);
+        ctx.beginPath();
+        ctx.arc(x, tempY, 2, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Hour label (every 3 hours)
+        if (i % 3 === 0) {
+          ctx.font = '6px "IBM Plex Mono", monospace';
+          ctx.fillStyle = gray(textBrightness - 5);
+          ctx.textAlign = 'center';
+          ctx.fillText(`${h.hour}:00`, x, 58);
+        }
       }
 
-      // Current temp (large, left side)
+      // === CURRENT TEMP DISPLAY ===
       if (weatherData) {
-        ctx.font = 'bold 20px "Orbitron", "IBM Plex Mono", monospace';
+        ctx.font = 'bold 16px "Orbitron", monospace';
         ctx.textAlign = 'left';
-        ctx.fillStyle = gray(Math.min(textBrightness + 3, 15));
-        ctx.fillText(`${weatherData.temp}°`, 8, 28);
+        ctx.fillStyle = gray(textBrightness + 3);
+        ctx.fillText(`${weatherData.temp}°`, 52, 18);
 
-        // Weather label
-        ctx.font = '9px "IBM Plex Mono", monospace';
-        ctx.fillStyle = gray(textBrightness - 1);
-        ctx.fillText(weatherData.conditionLabel, 8, 42);
-
-        // Rain now
         ctx.font = '8px "IBM Plex Mono", monospace';
-        ctx.fillStyle = gray(textBrightness - 3);
-        ctx.fillText(`降水 ${weatherData.rain_prob}%`, 8, 54);
+        ctx.fillStyle = gray(textBrightness - 2);
+        ctx.fillText(weatherData.conditionLabel, 90, 18);
       }
+
+      // === MIN/MAX TEMP ===
+      ctx.font = '7px "IBM Plex Mono", monospace';
+      ctx.textAlign = 'right';
+      ctx.fillStyle = gray(textBrightness - 4);
+      ctx.fillText(`↓${tempMin}° ↑${tempMax}°`, 250, 10);
     }
     function drawWeather(b) {
       if (b < 2 || !weatherData || weatherData.loading) return;
