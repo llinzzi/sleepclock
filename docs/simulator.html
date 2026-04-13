@@ -54,6 +54,8 @@
       margin-top: 30px;
       display: flex;
       gap: 12px;
+      flex-wrap: wrap;
+      justify-content: center;
     }
 
     button {
@@ -102,12 +104,14 @@
     <button id="btnWake">唤醒 (Wake)</button>
     <button id="btnSleep">待机 (Sleep)</button>
     <button id="btnStar">星辰 (Stars)</button>
+    <button id="btnWeather">天气 (Weather)</button>
   </div>
 
   <div class="status" id="status">待机模式</div>
 
   <div class="info">
-    分辨率: 256×64 | 灰度: I4 (16级) | SSD1322 OLED
+    分辨率: 256×64 | 灰度: I4 (16级) | SSD1322 OLED<br>
+    唤醒时间 &gt; 07:00 显示天气
   </div>
 
   <script>
@@ -122,10 +126,40 @@
     };
 
     // State
-    let mode = 'sleep'; // sleep, wake, star
+    let mode = 'sleep'; // sleep, wake, star, weather
     let brightness = 0; // 0-15
     let stars = [];
     let breathPhase = 0;
+    let weatherData = null;
+    let displayContent = 'time'; // time, weather
+
+    // Weather icons (simple pixel art representations)
+    const weatherIcons = {
+      sunny: { symbol: '☀', label: '晴' },
+      cloudy: { symbol: '☁', label: '多云' },
+      rain: { symbol: '🌧', label: '雨' },
+      snow: { symbol: '❄', label: '雪' },
+      fog: { symbol: '🌫', label: '雾' },
+    };
+
+    // Simulated weather for Hangzhou
+    function fetchWeather() {
+      // Simulated weather data for Hangzhou
+      const conditions = ['sunny', 'cloudy', 'rain', 'fog'];
+      const condition = conditions[Math.floor(Math.random() * conditions.length)];
+      const temp = Math.floor(Math.random() * 15) + 15; // 15-30°C
+      const humidity = Math.floor(Math.random() * 40) + 40; // 40-80%
+
+      weatherData = {
+        city: '杭州',
+        temp: temp,
+        condition: condition,
+        humidity: humidity,
+        pm25: Math.floor(Math.random() * 50) + 10,
+        wind: '东南风 ' + Math.floor(Math.random() * 3 + 1) + '级',
+      };
+      return weatherData;
+    }
 
     // Initialize stars
     function initStars() {
@@ -171,17 +205,58 @@
 
       // Shadow (offset)
       ctx.fillStyle = gray(Math.max(shadowBrightness, 0));
-      ctx.fillText(timeStr, 129, 33);
+      ctx.fillText(timeStr, 129, 25);
 
       // Main text
       ctx.fillStyle = gray(Math.min(textBrightness, 15));
-      ctx.fillText(timeStr, 128, 32);
+      ctx.fillText(timeStr, 128, 24);
 
       // Status dot
       const dotBrightness = Math.floor(5 + breath * 2);
       ctx.fillStyle = gray(dotBrightness);
       ctx.beginPath();
-      ctx.arc(128, 56, 1.5, 0, Math.PI * 2);
+      ctx.arc(128, 45, 1.5, 0, Math.PI * 2);
+      ctx.fill();
+
+      return textBrightness;
+    }
+
+    // Draw weather info
+    function drawWeather(b) {
+      if (b < 2 || !weatherData) return;
+
+      const breath = Math.sin(breathPhase * 0.5) * 0.5 + 0.5;
+      const textBrightness = Math.floor(Math.min(b, 12) + breath);
+
+      ctx.font = '10px "IBM Plex Mono", monospace';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+
+      // City
+      ctx.fillStyle = gray(Math.max(textBrightness - 4, 0));
+      ctx.fillText(weatherData.city, 128, 10);
+
+      // Temperature (large)
+      ctx.font = 'bold 18px "Orbitron", "IBM Plex Mono", monospace';
+      ctx.fillStyle = gray(Math.min(textBrightness + 2, 15));
+      ctx.fillText(`${weatherData.temp}°`, 128, 28);
+
+      // Weather condition
+      ctx.font = '10px "IBM Plex Mono", monospace';
+      ctx.fillStyle = gray(textBrightness - 2);
+      ctx.fillText(weatherIcons[weatherData.condition].label, 128, 44);
+
+      // Secondary info (humidity, pm25)
+      ctx.font = '8px "IBM Plex Mono", monospace';
+      ctx.fillStyle = gray(textBrightness - 5);
+      const secondary = `湿度 ${weatherData.humidity}%  PM2.5 ${weatherData.pm25}`;
+      ctx.fillText(secondary, 128, 56);
+
+      // Bottom dot
+      const dotBrightness = Math.floor(5 + breath * 2);
+      ctx.fillStyle = gray(dotBrightness);
+      ctx.beginPath();
+      ctx.arc(128, 62, 1, 0, Math.PI * 2);
       ctx.fill();
     }
 
@@ -190,6 +265,9 @@
       // Clear to black
       ctx.fillStyle = gray(0);
       ctx.fillRect(0, 0, 256, 64);
+
+      const now = new Date();
+      const hour = now.getHours();
 
       if (mode === 'sleep') {
         // Just ambient noise (dithering effect)
@@ -200,8 +278,20 @@
           ctx.fillRect(x, y, 1, 1);
         }
         brightness = Math.max(0, brightness - 0.5);
-      } else if (mode === 'wake') {
-        drawTime(brightness);
+        displayContent = 'time';
+      } else if (mode === 'wake' || mode === 'weather') {
+        if (mode === 'wake') {
+          // Show time only (morning) or time + weather (after 7am)
+          if (hour >= 7 && weatherData) {
+            drawWeather(brightness);
+          } else {
+            drawTime(brightness);
+          }
+        } else if (mode === 'weather') {
+          // Force weather display
+          if (!weatherData) fetchWeather();
+          drawWeather(brightness);
+        }
         brightness = Math.min(15, brightness + 0.3);
       } else if (mode === 'star') {
         drawStars();
@@ -226,6 +316,7 @@
     // Button handlers
     document.getElementById('btnWake').addEventListener('click', () => {
       mode = 'wake';
+      displayContent = hour >= 7 ? 'weather' : 'time';
       status.textContent = '显示模式';
     });
 
@@ -238,6 +329,12 @@
       mode = 'star';
       brightness = 10;
       status.textContent = '星辰模式';
+    });
+
+    document.getElementById('btnWeather').addEventListener('click', () => {
+      mode = 'weather';
+      fetchWeather();
+      status.textContent = `天气: ${weatherData.city} ${weatherData.temp}° ${weatherIcons[weatherData.condition].label}`;
     });
 
     // Keyboard: press any key to wake
@@ -253,6 +350,7 @@
 
     // Start
     initStars();
+    fetchWeather();
     render();
   </script>
 </body>
