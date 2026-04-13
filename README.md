@@ -8,30 +8,42 @@
 - **芯片**: ESP32-C3-MINI-1 (WiFi/Bluetooth)
 - **USB-UART**: CP2102N
 - **工作电压**: 3.3V
+- **输入电源**: 5V DC
 
 ### 显示
 - **型号**: SSD1322
 - **分辨率**: 256x64 灰度 OLED
 
+### 外设
+- **音频功放**: NS4168 (I2S 输入)
+- **LED 驱动**: FM116C (双路 H 桥)
+
 ### GPIO 连接
 
 | GPIO | 功能 | 连接到 |
 |------|------|--------|
-| GPIO0 | LED_CTRL | LED 驱动（通过 Q1） |
-| GPIO2 | NS_CTRL | 音频功放控制 |
+| GPIO0 | LED_CTRL | LED 背光控制（通过 Q1） |
+| GPIO2 | NS_CTRL | 音频功放 NS4168 关断控制 |
 | GPIO3 | KEY | 用户按键 |
-| GPIO4 | I2S_SDIN | 音频功放 NS4168 |
-| GPIO5 | I2S_SCLK | 音频功放 NS4168 |
-| GPIO6 | I2S_LROUT | 音频功放 NS4168 |
+| GPIO4 | I2S_SDIN | 音频功放 NS4168 数据输入 |
+| GPIO5 | I2S_SCLK | 音频功放 NS4168 时钟 |
+| GPIO6 | I2S_LRCLK | 音频功放 NS4168 左右声道时钟 |
 | GPIO7 | SPI_SCK | SSD1322 SCLK |
 | GPIO8 | SPI_DC | SSD1322 DC |
 | GPIO10 | SPI_SDA | SSD1322 SDI |
 | GPIO18 | USB_D- | USB 数据线 |
 | GPIO19 | USB_D+ | USB 数据线 |
-| GPIO20 | IN1 | LED 驱动 FM116C |
-| GPIO21 | IN2 | LED 驱动 FM116C |
+| GPIO20 | IN1 | LED 驱动 FM116C IN1 |
+| GPIO21 | IN2 | LED 驱动 FM116C IN2 |
 
-> SPI_CS 硬件接地，无需 GPIO。SPI_RST 连接到 CHIP_PU 复位信号。
+> GPIO9 未使用（NC）。SPI_CS 硬件接地，无需 GPIO。SPI_RST 连接到 CHIP_PU 复位信号。
+
+### 电源架构
+
+```
+5V DC 输入 → ME6217 LDO → 3.3V 供主控/外设
+                        → VLED 供显示背光
+```
 
 ## 功能特性
 
