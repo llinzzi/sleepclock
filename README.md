@@ -6,7 +6,7 @@
 
 ### 主控
 - **芯片**: ESP32-C3-MINI-1 (WiFi/Bluetooth)
-- **USB-UART**: CP2102N
+- **USB**: 原生 USB（通过 DE11 ESD 保护）
 - **工作电压**: 3.3V
 - **输入电源**: 5V DC
 
