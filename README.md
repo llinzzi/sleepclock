@@ -14,7 +14,12 @@
 - **型号**: SSD1322
 - **分辨率**: 256x64 灰度 OLED
 
-![SSD1322 模块接口](ssd1322.png)
+![SSD1322 模块接口](docs/ssd1322.png)
+
+### PCB
+
+![PCB 正面](docs/pcb1.png)
+![PCB 反面](docs/pcb2.png)
 
 ### 外设
 - **音频功放**: NS4168 (I2S 输入)
