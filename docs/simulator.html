@@ -6,7 +6,7 @@
   <title>Sleep Clock Simulator</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;700&family=Orbitron:wght@400;700:wght@400;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;700&family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
   <style>
     * {
       margin: 0;
@@ -47,6 +47,7 @@
       height: 128px;
       image-rendering: pixelated;
       border-radius: 2px;
+      background: #000;
     }
 
     .controls {
@@ -106,8 +107,7 @@
   <div class="status" id="status">待机模式</div>
 
   <div class="info">
-    分辨率: 256×64 | 灰度: I4 (16级) | SSD1322 OLED<br>
-    分辨率 256×64 | 灰度 I4 (16级) | SSD1322 OLED
+    分辨率: 256×64 | 灰度: I4 (16级) | SSD1322 OLED
   </div>
 
   <script>
@@ -126,25 +126,19 @@
     let brightness = 0; // 0-15
     let stars = [];
     let breathPhase = 0;
-    let animationId = null;
 
-    // Wait for fonts to load
-    document.fonts.ready.then(() => {
-      console.log('Fonts loaded');
-      initStars();
-      render();
-    });
+    // Initialize stars
+    function initStars() {
       stars = [];
       for (let i = 0; i < 30; i++) {
         stars.push({
           x: Math.random() * 256,
           y: Math.random() * 64,
           size: Math.random() < 0.3 ? 2 : 1,
-          brightness: Math.floor(Math.random() * 4) + 2, // 2-5 (faint)
+          brightness: Math.floor(Math.random() * 4) + 2,
         });
       }
     }
-    initStars();
 
     // Draw star field
     function drawStars() {
@@ -171,7 +165,7 @@
       const textBrightness = Math.floor(baseBrightness + breath * 2);
       const shadowBrightness = Math.floor(textBrightness - 3);
 
-      ctx.font = 'bold 28px "Orbitron", "IBM Plex Mono", monospace';
+      ctx.font = 'bold 24px "Orbitron", "IBM Plex Mono", monospace';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
 
@@ -198,7 +192,7 @@
       ctx.fillRect(0, 0, 256, 64);
 
       if (mode === 'sleep') {
-        // Just ambient noise
+        // Just ambient noise (dithering effect)
         for (let i = 0; i < 20; i++) {
           const x = Math.floor(Math.random() * 256);
           const y = Math.floor(Math.random() * 64);
@@ -215,7 +209,7 @@
         brightness = Math.max(0, brightness - 0.1);
       }
 
-      // Ambient noise overlay (always)
+      // Ambient noise overlay
       if (brightness < 8 && mode !== 'sleep') {
         for (let i = 0; i < 5; i++) {
           const x = Math.floor(Math.random() * 256);
@@ -226,7 +220,7 @@
       }
 
       breathPhase += 0.02;
-      animationId = requestAnimationFrame(render);
+      requestAnimationFrame(render);
     }
 
     // Button handlers
@@ -258,6 +252,7 @@
     });
 
     // Start
+    initStars();
     render();
   </script>
 </body>
