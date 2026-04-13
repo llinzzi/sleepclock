@@ -128,8 +128,12 @@
     let breathPhase = 0;
     let animationId = null;
 
-    // Initialize stars
-    function initStars() {
+    // Wait for fonts to load
+    document.fonts.ready.then(() => {
+      console.log('Fonts loaded');
+      initStars();
+      render();
+    });
       stars = [];
       for (let i = 0; i < 30; i++) {
         stars.push({
@@ -167,7 +171,7 @@
       const textBrightness = Math.floor(baseBrightness + breath * 2);
       const shadowBrightness = Math.floor(textBrightness - 3);
 
-      ctx.font = 'bold 22px "Orbitron", "IBM Plex Mono", monospace';
+      ctx.font = 'bold 28px "Orbitron", "IBM Plex Mono", monospace';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
 
