@@ -134,74 +134,146 @@
     let weatherData = null;
     let hourlyForecast = []; // Store 12-hour forecast
 
-    // Weather icons (simple pixel art representations)
+    // QWeather API credentials
+    const QWEATHER_HOST = 'nn3aaqw4wr.re.qweatherapi.com';
+    const QWEATHER_TOKEN = 'K4WMKGH9VV';
+    const QWEATHER_KEY = 'e8e879aca230481f9201f67de0583184';
+    const HANGZHOU_LOCATION = '120.15,30.27'; // 经度,纬度
+
+    // Weather icons mapping
     const weatherIcons = {
-      0: { label: '晴' },
-      1: { label: '晴' },
-      2: { label: '多云' },
-      3: { label: '阴' },
-      45: { label: '雾' },
-      48: { label: '雾凇' },
-      51: { label: '小毛毛雨' },
-      53: { label: '中毛毛雨' },
-      55: { label: '大毛毛雨' },
-      61: { label: '小雨' },
-      63: { label: '中雨' },
-      65: { label: '大雨' },
-      71: { label: '小雪' },
-      73: { label: '中雪' },
-      75: { label: '大雪' },
-      80: { label: '阵雨' },
-      81: { label: '中阵雨' },
-      82: { label: '大阵雨' },
-      95: { label: '雷雨' },
-      96: { label: '雷暴' },
-      99: { label: '雷暴冰雹' },
+      '100': '晴',
+      '101': '多云',
+      '102': '少云',
+      '103': '晴间多云',
+      '104': '阴',
+      '150': '晴',
+      '151': '多云',
+      '152': '少云',
+      '153': '晴间多云',
+      '154': '阴',
+      '300': '轻毛毛雨',
+      '301': '毛毛雨',
+      '302': '重毛毛雨',
+      '303': '小雨',
+      '304': '中雨',
+      '305': '大雨',
+      '306': '极端降雨',
+      '307': '大暴雨',
+      '308': '特大暴雨',
+      '309': '冻毛毛雨',
+      '310': '冻雨',
+      '311': '冰雨',
+      '312': '极端冰雨',
+      '313': '小冰雹',
+      '314': '中冰雹',
+      '315': '大冰雹',
+      '316': '冰粒',
+      '317': '冻雾',
+      '318': '雾',
+      '350': '阵雨',
+      '360': '雷阵雨',
+      '399': '雨',
+      '400': '小雪',
+      '401': '中雪',
+      '402': '大雪',
+      '403': '极端降雪',
+      '404': '冻雪',
+      '405': '雪粒',
+      '406': '阵雪',
+      '407': '雪夹雾',
+      '408': '雪',
+      '409': '大雪',
+      '410': '雷暴雪',
+      '499': '雪',
+      '500': '雾',
+      '501': '薄雾',
+      '502': '浓雾',
+      '503': '冻雾',
+      '504': '冻雾',
+      '507': '沙尘',
+      '508': '扬沙',
+      '509': '雾',
+      '510': '浓雾',
+      '511': '冻雾',
+      '512': '冻雾',
+      '513': '雾',
+      '514': '冻雾',
+      '515': '冻雾',
+      '900': '热',
+      '901': '冷',
+      '999': '未知',
     };
 
-    // Real weather from Open-Meteo API (Hangzhou)
+    // Real weather from QWeather API (Hangzhou)
     async function fetchWeather() {
       try {
-        const response = await fetch(
-          'https://api.open-meteo.com/v1/forecast?' +
-          'latitude=30.27&longitude=120.15&' +
-          'hourly=temperature_2m,precipitation_probability,weathercode,precipitation&' +
-          'daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max&' +
-          'timezone=Asia/Shanghai&forecast_days=2'
+        // Fetch hourly forecast (24h)
+        const hourlyResponse = await fetch(
+          `https://${QWEATHER_HOST}/v7/weather/24h?location=${HANGZHOU_LOCATION}`,
+          {
+            headers: {
+              'Authorization': `Bearer ${QWEATHER_TOKEN}`,
+              'X-QW-Api-Key': QWEATHER_KEY,
+            }
+          }
         );
-        const data = await response.json();
+        const hourlyData = await hourlyResponse.json();
+
+        // Fetch daily forecast
+        const dailyResponse = await fetch(
+          `https://${QWEATHER_HOST}/v7/weather/7d?location=${HANGZHOU_LOCATION}`,
+          {
+            headers: {
+              'Authorization': `Bearer ${QWEATHER_TOKEN}`,
+              'X-QW-Api-Key': QWEATHER_KEY,
+            }
+          }
+        );
+        const dailyData = await dailyResponse.json();
+
+        if (hourlyData.code !== '200' || dailyData.code !== '200') {
+          throw new Error('API error');
+        }
 
         const now = new Date();
         const currentHour = now.getHours();
 
         // Store hourly data for next 12 hours
         hourlyForecast = [];
-        for (let i = 0; i < 12; i++) {
-          const idx = currentHour + i;
-          if (idx < data.hourly.time.length) {
-            const time = new Date(data.hourly.time[idx]);
-            hourlyForecast.push({
-              hour: time.getHours(),
-              temp: Math.round(data.hourly.temperature_2m[idx]),
-              rain_prob: data.hourly.precipitation_probability[idx],
-              rain_mm: data.hourly.precipitation[idx],
-              condition: data.hourly.weathercode[idx],
-              conditionLabel: weatherIcons[data.hourly.weathercode[idx]]?.label || '未知',
-            });
-          }
+        const hourlyList = hourlyData.hourly || [];
+        for (let i = 0; i < 12 && i < hourlyList.length; i++) {
+          const h = hourlyList[i];
+          const fxTime = new Date(h.fxTime);
+          hourlyForecast.push({
+            hour: fxTime.getHours(),
+            temp: parseInt(h.temp),
+            rain_prob: parseInt(h.precip),
+            rain_mm: parseFloat(h.precip),
+            condition: h.icon,
+            conditionLabel: weatherIcons[h.icon] || h.text || '未知',
+          });
         }
+
+        // Current weather
+        const current = hourlyList.find(h => {
+          const fxTime = new Date(h.fxTime);
+          return fxTime.getHours() === currentHour;
+        }) || hourlyList[0];
+
+        const today = dailyData.daily?.[0];
 
         weatherData = {
           city: '杭州',
-          temp: Math.round(data.hourly.temperature_2m[currentHour]),
-          condition: data.hourly.weathercode[currentHour],
-          conditionLabel: weatherIcons[data.hourly.weathercode[currentHour]]?.label || '未知',
-          humidity: data.hourly.precipitation_probability[currentHour],
-          rain_prob: data.hourly.precipitation_probability[currentHour],
-          rain_amount: data.hourly.precipitation[currentHour],
-          temp_max: Math.round(data.daily.temperature_2m_max[0]),
-          temp_min: Math.round(data.daily.temperature_2m_min[0]),
-          wind: '东南风 ' + Math.floor(Math.random() * 2 + 1) + '级',
+          temp: parseInt(current.temp),
+          condition: current.icon,
+          conditionLabel: weatherIcons[current.icon] || current.text || '晴',
+          humidity: parseInt(current.humidity),
+          rain_prob: parseInt(current.precip),
+          rain_amount: parseFloat(current.precip),
+          temp_max: today ? parseInt(today.tempMax) : 30,
+          temp_min: today ? parseInt(today.tempMin) : 20,
+          wind: `${current.windDir} ${current.windScale}级`,
           loading: false,
         };
       } catch (e) {
@@ -209,7 +281,7 @@
         weatherData = {
           city: '杭州',
           temp: 25,
-          condition: 0,
+          condition: '100',
           conditionLabel: '晴',
           humidity: 50,
           rain_prob: 0,
