@@ -105,6 +105,7 @@
     <button id="btnSleep">待机 (Sleep)</button>
     <button id="btnStar">星辰 (Stars)</button>
     <button id="btnWeather">天气 (Weather)</button>
+    <button id="btnHourly">12小时 (Hourly)</button>
   </div>
 
   <div class="status" id="status">待机模式</div>
@@ -126,12 +127,12 @@
     };
 
     // State
-    let mode = 'sleep'; // sleep, wake, star, weather
+    let mode = 'sleep'; // sleep, wake, star, weather, hourly
     let brightness = 0; // 0-15
     let stars = [];
     let breathPhase = 0;
     let weatherData = null;
-    let displayContent = 'time'; // time, weather
+    let hourlyForecast = []; // Store 12-hour forecast
 
     // Weather icons (simple pixel art representations)
     const weatherIcons = {
@@ -166,22 +167,38 @@
           'latitude=30.27&longitude=120.15&' +
           'hourly=temperature_2m,precipitation_probability,weathercode,precipitation&' +
           'daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max&' +
-          'timezone=Asia/Shanghai&forecast_days=1'
+          'timezone=Asia/Shanghai&forecast_days=2'
         );
         const data = await response.json();
 
         const now = new Date();
         const currentHour = now.getHours();
-        const hourlyIndex = currentHour;
+
+        // Store hourly data for next 12 hours
+        hourlyForecast = [];
+        for (let i = 0; i < 12; i++) {
+          const idx = currentHour + i;
+          if (idx < data.hourly.time.length) {
+            const time = new Date(data.hourly.time[idx]);
+            hourlyForecast.push({
+              hour: time.getHours(),
+              temp: Math.round(data.hourly.temperature_2m[idx]),
+              rain_prob: data.hourly.precipitation_probability[idx],
+              rain_mm: data.hourly.precipitation[idx],
+              condition: data.hourly.weathercode[idx],
+              conditionLabel: weatherIcons[data.hourly.weathercode[idx]]?.label || '未知',
+            });
+          }
+        }
 
         weatherData = {
           city: '杭州',
-          temp: Math.round(data.hourly.temperature_2m[hourlyIndex]),
-          condition: data.hourly.weathercode[hourlyIndex],
-          conditionLabel: weatherIcons[data.hourly.weathercode[hourlyIndex]]?.label || '未知',
-          humidity: data.hourly.precipitation_probability[hourlyIndex],
-          rain_prob: data.hourly.precipitation_probability[hourlyIndex],
-          rain_amount: data.hourly.precipitation[hourlyIndex],
+          temp: Math.round(data.hourly.temperature_2m[currentHour]),
+          condition: data.hourly.weathercode[currentHour],
+          conditionLabel: weatherIcons[data.hourly.weathercode[currentHour]]?.label || '未知',
+          humidity: data.hourly.precipitation_probability[currentHour],
+          rain_prob: data.hourly.precipitation_probability[currentHour],
+          rain_amount: data.hourly.precipitation[currentHour],
           temp_max: Math.round(data.daily.temperature_2m_max[0]),
           temp_min: Math.round(data.daily.temperature_2m_min[0]),
           wind: '东南风 ' + Math.floor(Math.random() * 2 + 1) + '级',
@@ -202,6 +219,7 @@
           wind: '东南风 2级',
           loading: false,
         };
+        hourlyForecast = [];
       }
       return weatherData;
     }
@@ -266,7 +284,59 @@
       return textBrightness;
     }
 
-    // Draw weather info
+    // Draw hourly forecast (compact)
+    function drawHourly(b) {
+      if (b < 2 || hourlyForecast.length === 0) return;
+
+      const breath = Math.sin(breathPhase * 0.5) * 0.5 + 0.5;
+      const textBrightness = Math.floor(Math.min(b, 12) + breath);
+
+      // Title
+      ctx.font = '8px "IBM Plex Mono", monospace';
+      ctx.textAlign = 'center';
+      ctx.fillStyle = gray(textBrightness - 4);
+      ctx.fillText('12小时预报', 128, 8);
+
+      // Draw 6 hours in first row, 6 in second
+      const colWidth = 42;
+      const startX = 6;
+
+      for (let i = 0; i < Math.min(12, hourlyForecast.length); i++) {
+        const h = hourlyForecast[i];
+        const col = i % 6;
+        const row = Math.floor(i / 6);
+        const x = startX + col * colWidth;
+        const y = row === 0 ? 18 : 44;
+
+        // Hour
+        ctx.font = '7px "IBM Plex Mono", monospace';
+        ctx.fillStyle = gray(textBrightness - 5);
+        ctx.textAlign = 'center';
+        ctx.fillText(`${h.hour}:00`, x + 18, y);
+
+        // Rain bar (height proportional to rain probability)
+        const barHeight = Math.round((h.rain_prob / 100) * 16);
+        ctx.fillStyle = gray(textBrightness - 2);
+        ctx.fillRect(x + 14, y + 4, 8, 16 - barHeight);
+
+        // Temperature
+        ctx.font = 'bold 8px "IBM Plex Mono", monospace';
+        ctx.fillStyle = gray(textBrightness);
+        ctx.fillText(`${h.temp}°`, x + 18, y + 14);
+
+        // Rain probability
+        ctx.font = '6px "IBM Plex Mono", monospace';
+        ctx.fillStyle = gray(textBrightness - 5);
+        ctx.fillText(`${h.rain_prob}%`, x + 18, y + 22);
+      }
+
+      // Bottom dot
+      const dotBrightness = Math.floor(5 + breath * 2);
+      ctx.fillStyle = gray(dotBrightness);
+      ctx.beginPath();
+      ctx.arc(248, 58, 1.5, 0, Math.PI * 2);
+      ctx.fill();
+    }
     function drawWeather(b) {
       if (b < 2 || !weatherData || weatherData.loading) return;
 
@@ -363,6 +433,9 @@
         drawStars();
         drawTime(Math.max(brightness, 5));
         brightness = Math.min(15, brightness + 0.3);
+      } else if (mode === 'hourly') {
+        drawHourly(brightness);
+        brightness = Math.min(15, brightness + 0.3);
       }
 
       // Ambient noise overlay
@@ -402,6 +475,12 @@
       weatherData = { loading: true };
       await fetchWeather();
       status.textContent = `${weatherData.city} ${weatherData.temp}° ${weatherData.conditionLabel} 降水${weatherData.rain_prob}%`;
+    });
+
+    document.getElementById('btnHourly').addEventListener('click', async () => {
+      mode = 'hourly';
+      if (hourlyForecast.length === 0) await fetchWeather();
+      status.textContent = '12小时预报';
     });
 
     // Keyboard: press any key to wake
