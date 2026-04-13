@@ -106,6 +106,7 @@
     <button id="btnStar">星辰 (Stars)</button>
     <button id="btnWeather">天气 (Weather)</button>
     <button id="btnHourly">12小时 (Hourly)</button>
+    <button id="btnDaytime">日间 (Day)</button>
   </div>
 
   <div class="status" id="status">待机模式</div>
@@ -127,12 +128,12 @@
     };
 
     // State
-    let mode = 'sleep'; // sleep, wake, star, weather, hourly
+    let mode = 'sleep'; // sleep, wake, star, weather, hourly, daytime
     let brightness = 0; // 0-15
     let stars = [];
     let breathPhase = 0;
     let weatherData = null;
-    let hourlyForecast = []; // Store 12-hour forecast
+    let hourlyForecast = []; // Store 24-hour forecast
 
     // QWeather API credentials
     const QWEATHER_HOST = 'nn3aaqw4wr.re.qweatherapi.com';
@@ -424,6 +425,85 @@
       ctx.arc(248, 58, 1.5, 0, Math.PI * 2);
       ctx.fill();
     }
+
+    // Draw daytime forecast (8am-8pm, 12 hours)
+    function drawDaytime(b) {
+      if (b < 2 || hourlyForecast.length === 0) return;
+
+      const breath = Math.sin(breathPhase * 0.5) * 0.5 + 0.5;
+      const textBrightness = Math.floor(Math.min(b, 12) + breath);
+
+      // Find 8am index, if before 8am start from next day
+      const now = new Date();
+      const currentHour = now.getHours();
+
+      // Filter to get 8am-8pm (12 hours)
+      let daytimeData = [];
+      for (let i = 0; i < hourlyForecast.length; i++) {
+        const h = hourlyForecast[i];
+        if (h.hour >= 8 && h.hour <= 20) {
+          daytimeData.push(h);
+        }
+      }
+      // If not enough 8am-8pm data, just use what we have
+      if (daytimeData.length === 0) {
+        daytimeData = hourlyForecast.slice(0, 12);
+      }
+      daytimeData = daytimeData.slice(0, 12); // Max 12 hours
+
+      // Title with current time
+      ctx.font = '8px "IBM Plex Mono", monospace';
+      ctx.textAlign = 'center';
+      ctx.fillStyle = gray(textBrightness - 4);
+      ctx.fillText(`日间天气 ${now.getMonth()+1}/${now.getDate()}日`, 128, 8);
+
+      // Time axis (bottom)
+      const colWidth = 21;
+      const startX = 0;
+      const chartY = 52;
+      const chartHeight = 10;
+
+      // Draw timeline for each hour
+      for (let i = 0; i < daytimeData.length; i++) {
+        const h = daytimeData[i];
+        const x = startX + i * colWidth;
+
+        // Time label
+        ctx.font = '6px "IBM Plex Mono", monospace';
+        ctx.fillStyle = gray(textBrightness - 5);
+        ctx.textAlign = 'center';
+        ctx.fillText(`${h.hour}`, x + colWidth/2, chartY + chartHeight + 5);
+
+        // Rain probability bar (from bottom)
+        const rainHeight = Math.round((h.rain_prob / 100) * chartHeight);
+        ctx.fillStyle = gray(textBrightness - 3);
+        ctx.fillRect(x + 2, chartY + chartHeight - rainHeight, colWidth - 4, rainHeight);
+
+        // Temperature (above bar)
+        ctx.font = 'bold 8px "IBM Plex Mono", monospace';
+        ctx.fillStyle = gray(textBrightness);
+        ctx.textAlign = 'center';
+        ctx.fillText(`${h.temp}°`, x + colWidth/2, chartY - 2);
+      }
+
+      // Current temp (large, left side)
+      if (weatherData) {
+        ctx.font = 'bold 20px "Orbitron", "IBM Plex Mono", monospace';
+        ctx.textAlign = 'left';
+        ctx.fillStyle = gray(Math.min(textBrightness + 3, 15));
+        ctx.fillText(`${weatherData.temp}°`, 8, 28);
+
+        // Weather label
+        ctx.font = '9px "IBM Plex Mono", monospace';
+        ctx.fillStyle = gray(textBrightness - 1);
+        ctx.fillText(weatherData.conditionLabel, 8, 42);
+
+        // Rain now
+        ctx.font = '8px "IBM Plex Mono", monospace';
+        ctx.fillStyle = gray(textBrightness - 3);
+        ctx.fillText(`降水 ${weatherData.rain_prob}%`, 8, 54);
+      }
+    }
     function drawWeather(b) {
       if (b < 2 || !weatherData || weatherData.loading) return;
 
@@ -523,6 +603,9 @@
       } else if (mode === 'hourly') {
         drawHourly(brightness);
         brightness = Math.min(15, brightness + 0.3);
+      } else if (mode === 'daytime') {
+        drawDaytime(brightness);
+        brightness = Math.min(15, brightness + 0.3);
       }
 
       // Ambient noise overlay
@@ -571,6 +654,15 @@
       }
       mode = 'hourly';
       status.textContent = '12小时预报';
+    });
+
+    document.getElementById('btnDaytime').addEventListener('click', async () => {
+      if (hourlyForecast.length === 0) {
+        status.textContent = '加载中...';
+        await fetchWeather();
+      }
+      mode = 'daytime';
+      status.textContent = '日间天气 8:00-20:00';
     });
 
     // Keyboard: press any key to wake
