@@ -24,6 +24,7 @@
 |------|------|--------|
 | GPIO0 | 32k_XP | 32.768kHz 晶振 |
 | GPIO1 | 32k_XN | 32.768kHz 晶振 |
+| GPIO2 | NS_CTRL | 音频功放 NS4168 关断控制 |
 | GPIO3 | KEY | 用户按键 |
 | GPIO9 | BOOT | 下载/启动按键 |
 | GPIO4 | I2S_SDIN | 音频功放 NS4168 数据输入 |
