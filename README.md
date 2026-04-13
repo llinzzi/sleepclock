@@ -22,9 +22,10 @@
 
 | GPIO | 功能 | 连接到 |
 |------|------|--------|
-| GPIO0 | LED_CTRL | LED 背光控制（通过 Q1） |
-| GPIO2 | NS_CTRL | 音频功放 NS4168 关断控制 |
+| GPIO0 | 32k_XP | 32.768kHz 晶振 |
+| GPIO1 | 32k_XN | 32.768kHz 晶振 |
 | GPIO3 | KEY | 用户按键 |
+| GPIO9 | BOOT | 下载/启动按键 |
 | GPIO4 | I2S_SDIN | 音频功放 NS4168 数据输入 |
 | GPIO5 | I2S_SCLK | 音频功放 NS4168 时钟 |
 | GPIO6 | I2S_LRCLK | 音频功放 NS4168 左右声道时钟 |
@@ -36,7 +37,7 @@
 | GPIO20 | IN1 | LED 驱动 FM116C IN1 |
 | GPIO21 | IN2 | LED 驱动 FM116C IN2 |
 
-> GPIO9 未使用（NC）。SPI_CS 硬件接地，无需 GPIO。SPI_RST 连接到 CHIP_PU 复位信号。
+> SPI_CS 硬件接地，无需 GPIO。SPI_RST 连接到 CHIP_PU 复位信号。
 
 ### 电源架构
 
