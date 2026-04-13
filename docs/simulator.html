@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sleep Clock Simulator</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      background: #0a0a0a;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, sans-serif;
+      color: #888;
+    }
+
+    h1 {
+      color: #555;
+      font-size: 14px;
+      font-weight: 400;
+      margin-bottom: 20px;
+      letter-spacing: 2px;
+    }
+
+    .screen-container {
+      position: relative;
+      border: 2px solid #1a1a1a;
+      border-radius: 4px;
+      padding: 8px;
+      background: #111;
+    }
+
+    #canvas {
+      display: block;
+      width: 512px;
+      height: 128px;
+      image-rendering: pixelated;
+      border-radius: 2px;
+    }
+
+    .controls {
+      margin-top: 30px;
+      display: flex;
+      gap: 12px;
+    }
+
+    button {
+      background: #1a1a1a;
+      border: 1px solid #333;
+      color: #888;
+      padding: 10px 20px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 13px;
+      transition: all 0.2s;
+    }
+
+    button:hover {
+      background: #252525;
+      border-color: #444;
+      color: #aaa;
+    }
+
+    button:active {
+      transform: scale(0.98);
+    }
+
+    .status {
+      margin-top: 20px;
+      font-size: 12px;
+      color: #444;
+    }
+
+    .info {
+      margin-top: 40px;
+      font-size: 11px;
+      color: #333;
+      text-align: center;
+      line-height: 1.8;
+    }
+  </style>
+</head>
+<body>
+  <h1>SLEEP CLOCK</h1>
+  <div class="screen-container">
+    <canvas id="canvas" width="256" height="64"></canvas>
+  </div>
+
+  <div class="controls">
+    <button id="btnWake">唤醒 (Wake)</button>
+    <button id="btnSleep">待机 (Sleep)</button>
+    <button id="btnStar">星辰 (Stars)</button>
+  </div>
+
+  <div class="status" id="status">待机模式</div>
+
+  <div class="info">
+    分辨率: 256×64 | 灰度: I4 (16级) | SSD1322 OLED<br>
+    分辨率 256×64 | 灰度 I4 (16级) | SSD1322 OLED
+  </div>
+
+  <script>
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    const status = document.getElementById('status');
+
+    // I4 grayscale palette (16 levels: 0-15)
+    const gray = (level) => {
+      const v = Math.round((level / 15) * 255);
+      return `rgb(${v},${v},${v})`;
+    };
+
+    // State
+    let mode = 'sleep'; // sleep, wake, star
+    let brightness = 0; // 0-15
+    let stars = [];
+    let breathPhase = 0;
+    let animationId = null;
+
+    // Initialize stars
+    function initStars() {
+      stars = [];
+      for (let i = 0; i < 30; i++) {
+        stars.push({
+          x: Math.random() * 256,
+          y: Math.random() * 64,
+          size: Math.random() < 0.3 ? 2 : 1,
+          brightness: Math.floor(Math.random() * 4) + 2, // 2-5 (faint)
+        });
+      }
+    }
+    initStars();
+
+    // Draw star field
+    function drawStars() {
+      stars.forEach(star => {
+        const flicker = Math.sin(breathPhase * 3 + star.x) * 0.5 + 0.5;
+        const b = Math.floor(star.brightness * flicker);
+        ctx.fillStyle = gray(Math.min(b + 2, 15));
+        ctx.fillRect(Math.floor(star.x), Math.floor(star.y), star.size, star.size);
+      });
+    }
+
+    // Draw time
+    function drawTime(b) {
+      if (b < 2) return;
+
+      const now = new Date();
+      const h = now.getHours().toString().padStart(2, '0');
+      const m = now.getMinutes().toString().padStart(2, '0');
+      const timeStr = `${h}:${m}`;
+
+      // Breathing effect
+      const breath = Math.sin(breathPhase * 0.5) * 0.5 + 0.5;
+      const baseBrightness = Math.min(b, 11);
+      const textBrightness = Math.floor(baseBrightness + breath * 2);
+      const shadowBrightness = Math.floor(textBrightness - 3);
+
+      ctx.font = 'bold 20px SF Pro Display, Helvetica Neue, Arial, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+
+      // Shadow (offset)
+      ctx.fillStyle = gray(Math.max(shadowBrightness, 0));
+      ctx.fillText(timeStr, 129, 33);
+
+      // Main text
+      ctx.fillStyle = gray(Math.min(textBrightness, 15));
+      ctx.fillText(timeStr, 128, 32);
+
+      // Status dot
+      const dotBrightness = Math.floor(5 + breath * 2);
+      ctx.fillStyle = gray(dotBrightness);
+      ctx.beginPath();
+      ctx.arc(128, 56, 1.5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // Main render loop
+    function render() {
+      // Clear to black
+      ctx.fillStyle = gray(0);
+      ctx.fillRect(0, 0, 256, 64);
+
+      if (mode === 'sleep') {
+        // Just ambient noise
+        for (let i = 0; i < 20; i++) {
+          const x = Math.floor(Math.random() * 256);
+          const y = Math.floor(Math.random() * 64);
+          ctx.fillStyle = gray(1);
+          ctx.fillRect(x, y, 1, 1);
+        }
+        brightness = Math.max(0, brightness - 0.5);
+      } else if (mode === 'wake') {
+        drawTime(brightness);
+        brightness = Math.min(15, brightness + 0.3);
+      } else if (mode === 'star') {
+        drawStars();
+        drawTime(Math.max(brightness, 3));
+        brightness = Math.max(0, brightness - 0.1);
+      }
+
+      // Ambient noise overlay (always)
+      if (brightness < 8 && mode !== 'sleep') {
+        for (let i = 0; i < 5; i++) {
+          const x = Math.floor(Math.random() * 256);
+          const y = Math.floor(Math.random() * 64);
+          ctx.fillStyle = gray(1);
+          ctx.fillRect(x, y, 1, 1);
+        }
+      }
+
+      breathPhase += 0.02;
+      animationId = requestAnimationFrame(render);
+    }
+
+    // Button handlers
+    document.getElementById('btnWake').addEventListener('click', () => {
+      mode = 'wake';
+      status.textContent = '显示模式';
+    });
+
+    document.getElementById('btnSleep').addEventListener('click', () => {
+      mode = 'sleep';
+      status.textContent = '待机模式';
+    });
+
+    document.getElementById('btnStar').addEventListener('click', () => {
+      mode = 'star';
+      brightness = 10;
+      status.textContent = '星辰模式';
+    });
+
+    // Keyboard: press any key to wake
+    document.addEventListener('keydown', () => {
+      mode = 'wake';
+      status.textContent = '显示模式';
+    });
+
+    document.addEventListener('keyup', () => {
+      mode = 'sleep';
+      status.textContent = '待机模式';
+    });
+
+    // Start
+    render();
+  </script>
+</body>
+</html>
