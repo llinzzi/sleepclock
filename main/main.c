@@ -1,38 +1,82 @@
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "esp_timer.h"
+#include "nvs_flash.h"
+#include "wifi_connect.h"
 #include "ssd1322_driver.h"
 #include "lvgl_adapter.h"
 #include "ui.h"
 #include "lvgl.h"
+#include "screen_mgr.h"
+#include "btn_handler.h"
+#include "weather_service.h"
 
 static const char *TAG = "MAIN";
 
 void app_main(void)
 {
-    ESP_LOGI(TAG, "Starting SSD1322 OLED with LVGL");
-    
-    // 初始化SSD1322驱动
+    ESP_LOGI(TAG, "Starting Sleep Clock");
+
+    // Initialize NVS
+    esp_err_t ret = nvs_flash_init();
+    if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
+        ESP_ERROR_CHECK(nvs_flash_erase());
+        ret = nvs_flash_init();
+    }
+    ESP_ERROR_CHECK(ret);
+
+    // Initialize SSD1322 driver
     ESP_ERROR_CHECK(ssd1322_init());
-    
-    // 初始化LVGL适配层
+
+    // Initialize LVGL adapter
     ESP_ERROR_CHECK(lvgl_adapter_init());
-    
-    // 等待LVGL任务启动
+
+    // Initialize UI (EEZ Studio)
     vTaskDelay(pdMS_TO_TICKS(100));
-    
-    // 创建UI界面
     ESP_ERROR_CHECK(ui_wrapper_init());
-    
-    // 等待UI加载
     vTaskDelay(pdMS_TO_TICKS(100));
-    
-    // 强制刷新屏幕
+
+    // Initialize button handler
+    btn_handler_init();
+
+    // Initialize screen manager
+    screen_mgr_init();
+
+    // Initialize weather service
+    weather_service_init();
+
+    // Connect to WiFi for weather data
+    wifi_connect();
+
+    // Force screen refresh
     lv_refr_now(NULL);
-    
+
     ESP_LOGI(TAG, "All initialized successfully");
-    
+
+    // Main loop - handle buttons and update screen
+    uint32_t last_update = 0;
     while (1) {
-        vTaskDelay(pdMS_TO_TICKS(1000));
+        uint32_t now = xTaskGetTickCount() * portTICK_PERIOD_MS;
+
+        // Update screen every ~16ms (60fps)
+        if (now - last_update >= 16) {
+            btn_event_t event = btn_handler_poll();
+
+            if (event == BTN_EVENT_PRESS) {
+                ESP_LOGI(TAG, "Button pressed - wake");
+                screen_mgr_on_wake();
+            } else if (event == BTN_EVENT_LONG_3S) {
+                ESP_LOGI(TAG, "Button long 3s - sleep");
+                screen_mgr_on_sleep();
+            }
+
+            // Update screen manager
+            screen_mgr_update(now);
+
+            last_update = now;
+        }
+
+        vTaskDelay(pdMS_TO_TICKS(10));
     }
 }

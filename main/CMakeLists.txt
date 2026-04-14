@@ -7,5 +7,11 @@ idf_component_register(SRCS "main.c"
                             "ui/styles.c"
                             "ui/images.c"
                             "ui/ui_image_sunning.c"
+                            "screen_mgr.c"
+                            "star_field.c"
+                            "weather_chart.c"
+                            "weather_service.c"
+                            "btn_handler.c"
+                            "wifi_connect.c"
                     INCLUDE_DIRS "."
-                    REQUIRES lvgl__lvgl driver)
+                    REQUIRES lvgl__lvgl driver esp_timer esp_http_client nvs_flash esp_wifi json)

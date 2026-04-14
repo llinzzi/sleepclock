@@ -104,16 +104,13 @@
     <button id="btnWake">唤醒 (Wake)</button>
     <button id="btnSleep">待机 (Sleep)</button>
     <button id="btnStar">星辰 (Stars)</button>
-    <button id="btnWeather">天气 (Weather)</button>
-    <button id="btnHourly">12小时 (Hourly)</button>
-    <button id="btnDaytime">日间 (Day)</button>
   </div>
 
   <div class="status" id="status">待机模式</div>
 
   <div class="info">
     分辨率: 256×64 | 灰度: I4 (16级) | SSD1322 OLED<br>
-    唤醒时间 &gt; 07:00 显示天气
+    唤醒时间 18:00-06:59 星辰，其他时间天气
   </div>
 
   <script>
@@ -134,12 +131,13 @@
     let breathPhase = 0;
     let weatherData = null;
     let hourlyForecast = []; // Store 24-hour forecast
+    let starModeStartTime = 0; // Track when star mode started
 
     // QWeather API credentials
     const QWEATHER_HOST = 'nn3aaqw4wr.re.qweatherapi.com';
     const QWEATHER_TOKEN = 'K4WMKGH9VV';
     const QWEATHER_KEY = 'e8e879aca230481f9201f67de0583184';
-    const HANGZHOU_LOCATION = '120.15,30.27'; // 经度,纬度
+    const HANGZHOU_LOCATION = '30.27,120.15'; // 纬度,经度
 
     // Weather icons mapping
     const weatherIcons = {
@@ -211,30 +209,18 @@
       try {
         // Fetch hourly forecast (24h)
         const hourlyResponse = await fetch(
-          `https://${QWEATHER_HOST}/v7/weather/24h?location=${HANGZHOU_LOCATION}`,
-          {
-            headers: {
-              'Authorization': `Bearer ${QWEATHER_TOKEN}`,
-              'X-QW-Api-Key': QWEATHER_KEY,
-            }
-          }
+          `https://${QWEATHER_HOST}/v7/weather/24h?location=101210101&key=${QWEATHER_KEY}`
         );
         const hourlyData = await hourlyResponse.json();
 
         // Fetch daily forecast
         const dailyResponse = await fetch(
-          `https://${QWEATHER_HOST}/v7/weather/7d?location=${HANGZHOU_LOCATION}`,
-          {
-            headers: {
-              'Authorization': `Bearer ${QWEATHER_TOKEN}`,
-              'X-QW-Api-Key': QWEATHER_KEY,
-            }
-          }
+          `https://${QWEATHER_HOST}/v7/weather/7d?location=101210101&key=${QWEATHER_KEY}`
         );
         const dailyData = await dailyResponse.json();
 
         if (hourlyData.code !== '200' || dailyData.code !== '200') {
-          throw new Error('API error');
+          throw new Error('API error: ' + (hourlyData.msg || dailyData.msg || 'unknown'));
         }
 
         const now = new Date();
@@ -270,7 +256,7 @@
           condition: current.icon,
           conditionLabel: weatherIcons[current.icon] || current.text || '晴',
           humidity: parseInt(current.humidity),
-          rain_prob: parseInt(current.precip),
+          rain_prob: parseInt(current.pop),
           rain_amount: parseFloat(current.precip),
           temp_max: today ? parseInt(today.tempMax) : 30,
           temp_min: today ? parseInt(today.tempMin) : 20,
@@ -335,6 +321,16 @@
       });
     }
 
+    function drawStarsWithBrightness(brightness) {
+      if (brightness <= 0) return;
+      stars.forEach(star => {
+        const flicker = Math.sin(breathPhase * 3 + star.x) * 0.5 + 0.5;
+        const b = Math.floor(brightness * flicker);
+        ctx.fillStyle = gray(Math.max(0, Math.min(b, 15)));
+        ctx.fillRect(Math.floor(star.x), Math.floor(star.y), star.size, star.size);
+      });
+    }
+
     // Draw time
     function drawTime(b) {
       if (b < 2) return;
@@ -350,83 +346,29 @@
       const textBrightness = Math.floor(baseBrightness + breath * 2);
       const shadowBrightness = Math.floor(textBrightness - 3);
 
-      ctx.font = 'bold 24px "Orbitron", "IBM Plex Mono", monospace';
+      ctx.font = 'bold 28px "Orbitron", "IBM Plex Mono", monospace';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
 
       // Shadow (offset)
       ctx.fillStyle = gray(Math.max(shadowBrightness, 0));
-      ctx.fillText(timeStr, 129, 25);
+      ctx.fillText(timeStr, 129, 33);
 
       // Main text
       ctx.fillStyle = gray(Math.min(textBrightness, 15));
-      ctx.fillText(timeStr, 128, 24);
+      ctx.fillText(timeStr, 128, 32);
 
       // Status dot
       const dotBrightness = Math.floor(5 + breath * 2);
       ctx.fillStyle = gray(dotBrightness);
       ctx.beginPath();
-      ctx.arc(128, 45, 1.5, 0, Math.PI * 2);
+      ctx.arc(128, 50, 1.5, 0, Math.PI * 2);
       ctx.fill();
 
       return textBrightness;
     }
 
-    // Draw hourly forecast (compact)
-    function drawHourly(b) {
-      if (b < 2 || hourlyForecast.length === 0) return;
-
-      const breath = Math.sin(breathPhase * 0.5) * 0.5 + 0.5;
-      const textBrightness = Math.floor(Math.min(b, 12) + breath);
-
-      // Title
-      ctx.font = '8px "IBM Plex Mono", monospace';
-      ctx.textAlign = 'center';
-      ctx.fillStyle = gray(textBrightness - 4);
-      ctx.fillText('12小时预报', 128, 8);
-
-      // Draw 6 hours in first row, 6 in second
-      const colWidth = 42;
-      const startX = 6;
-
-      for (let i = 0; i < Math.min(12, hourlyForecast.length); i++) {
-        const h = hourlyForecast[i];
-        const col = i % 6;
-        const row = Math.floor(i / 6);
-        const x = startX + col * colWidth;
-        const y = row === 0 ? 18 : 44;
-
-        // Hour
-        ctx.font = '7px "IBM Plex Mono", monospace';
-        ctx.fillStyle = gray(textBrightness - 5);
-        ctx.textAlign = 'center';
-        ctx.fillText(`${h.hour}:00`, x + 18, y);
-
-        // Rain bar (height proportional to rain probability)
-        const barHeight = Math.round((h.rain_prob / 100) * 16);
-        ctx.fillStyle = gray(textBrightness - 2);
-        ctx.fillRect(x + 14, y + 4, 8, 16 - barHeight);
-
-        // Temperature
-        ctx.font = 'bold 8px "IBM Plex Mono", monospace';
-        ctx.fillStyle = gray(textBrightness);
-        ctx.fillText(`${h.temp}°`, x + 18, y + 14);
-
-        // Rain probability
-        ctx.font = '6px "IBM Plex Mono", monospace';
-        ctx.fillStyle = gray(textBrightness - 5);
-        ctx.fillText(`${h.rain_prob}%`, x + 18, y + 22);
-      }
-
-      // Bottom dot
-      const dotBrightness = Math.floor(5 + breath * 2);
-      ctx.fillStyle = gray(dotBrightness);
-      ctx.beginPath();
-      ctx.arc(248, 58, 1.5, 0, Math.PI * 2);
-      ctx.fill();
-    }
-
-    // Draw daytime forecast (8am-8pm, 12 hours) - dark artistic version
+    // Draw 12-hour forecast (no time filter)
     function drawDaytime(b) {
       if (b < 2 || hourlyForecast.length === 0) return;
 
@@ -434,36 +376,28 @@
       const textBrightness = Math.floor(Math.min(b, 11) + breath);
       const now = new Date();
 
-      // Filter 8am-8pm data
-      let daytimeData = [];
-      for (let i = 0; i < hourlyForecast.length; i++) {
-        const h = hourlyForecast[i];
-        if (h.hour >= 8 && h.hour <= 20) {
-          daytimeData.push(h);
-        }
-      }
-      if (daytimeData.length === 0) {
-        daytimeData = hourlyForecast.slice(0, 12);
-      }
-      daytimeData = daytimeData.slice(0, 12);
+      // Use all 12 hours from hourly forecast
+      const daytimeData = hourlyForecast.slice(0, 12);
 
       // === BLACK BACKGROUND ===
       ctx.fillStyle = gray(0);
       ctx.fillRect(0, 0, 256, 64);
 
       // === RAIN ANIMATION (at rain hours) ===
-      const rainAnimY = Math.floor(breathPhase * 20) % 50;
+      const rainSpeed = 10 + (hourlyForecast[0]?.rain_prob || 0) / 5;
+      const rainAnimY = Math.floor(breathPhase * rainSpeed) % 50;
       for (let i = 0; i < daytimeData.length; i++) {
         const h = daytimeData[i];
-        const x = 8 + i * 20;
+        const x = 14 + i * 20;
 
         if (h.rain_prob >= 30) {
-          // Draw falling rain drops
-          const dropCount = Math.floor(h.rain_prob / 15);
+          // Draw falling rain drops - more drops for higher probability
+          const dropCount = Math.floor(h.rain_prob / 10);
+          const dropSpacing = Math.max(8, 20 - h.rain_prob / 10);
           for (let d = 0; d < dropCount; d++) {
-            const dropY = (rainAnimY + d * 12) % 50;
+            const dropY = (rainAnimY + d * dropSpacing) % 50;
             ctx.fillStyle = gray(textBrightness - 5);
-            ctx.fillRect(x + d * 4, dropY + 5, 1, 4);
+            ctx.fillRect(x + d * 3, dropY + 5, 1, 4);
           }
         }
       }
@@ -481,7 +415,7 @@
       ctx.beginPath();
       for (let i = 0; i < daytimeData.length; i++) {
         const h = daytimeData[i];
-        const x = 8 + i * 20;
+        const x = 14 + i * 20;
         const y = chartBottom - ((h.temp - tempMin) / tempRange) * (chartBottom - chartTop);
         if (i === 0) ctx.moveTo(x, y);
         else ctx.lineTo(x, y);
@@ -491,7 +425,7 @@
       // Draw dots and temp labels
       for (let i = 0; i < daytimeData.length; i++) {
         const h = daytimeData[i];
-        const x = 8 + i * 20;
+        const x = 14 + i * 20;
         const y = chartBottom - ((h.temp - tempMin) / tempRange) * (chartBottom - chartTop);
 
         // Dot
@@ -500,35 +434,13 @@
         ctx.arc(x, y, 2, 0, Math.PI * 2);
         ctx.fill();
 
-        // Temp above dot
+        // Temp label - always show above dot, not overlapping time axis
         ctx.font = 'bold 7px "IBM Plex Mono", monospace';
         ctx.fillStyle = gray(textBrightness - 2);
         ctx.textAlign = 'center';
-        ctx.fillText(`${h.temp}°`, x, y - 4);
-
-        // Hour label below
-        ctx.font = '6px "IBM Plex Mono", monospace';
-        ctx.fillStyle = gray(textBrightness - 5);
-        ctx.fillText(`${h.hour}`, x, 54);
-      }
-
-      // === CURRENT TIME (top right) ===
-      const currentTime = `${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')}`;
-      ctx.font = 'bold 10px "Orbitron", monospace';
-      ctx.textAlign = 'right';
-      ctx.fillStyle = gray(textBrightness);
-      ctx.fillText(currentTime, 252, 12);
-
-      // === CURRENT WEATHER (bottom left) ===
-      if (weatherData) {
-        ctx.font = '7px "IBM Plex Mono", monospace';
-        ctx.textAlign = 'left';
-        ctx.fillStyle = gray(textBrightness - 3);
-        ctx.fillText(weatherData.conditionLabel, 4, 62);
-
-        // Rain now
-        ctx.textAlign = 'right';
-        ctx.fillText(`降${weatherData.rain_prob}%`, 252, 62);
+        // Always show temp above dot, min y=10 to avoid top clipping
+        const tempY = Math.max(y - 6, 10);
+        ctx.fillText(`${h.temp}°`, x, tempY);
       }
 
       // === TIME AXIS LINE ===
@@ -539,13 +451,24 @@
       ctx.lineTo(248, 48);
       ctx.stroke();
 
-      // Start/end labels
-      ctx.font = '6px "IBM Plex Mono", monospace';
-      ctx.fillStyle = gray(textBrightness - 5);
-      ctx.textAlign = 'left';
-      ctx.fillText('8时', 4, 51);
-      ctx.textAlign = 'right';
-      ctx.fillText('20时', 252, 51);
+      // Hour labels below time axis, avoid overlapping with temp labels
+      for (let i = 0; i < daytimeData.length; i++) {
+        const h = daytimeData[i];
+        const x = 14 + i * 20;
+
+        ctx.textAlign = 'center';
+        if (i === 0) {
+          // First point shows hour:minute, highlighted
+          const currentMin = now.getMinutes().toString().padStart(2, '0');
+          ctx.font = 'bold 7px "IBM Plex Mono", monospace';
+          ctx.fillStyle = gray(textBrightness);
+          ctx.fillText(`${h.hour}:${currentMin}`, x, 56);
+        } else {
+          ctx.font = '6px "IBM Plex Mono", monospace';
+          ctx.fillStyle = gray(textBrightness - 5);
+          ctx.fillText(`${h.hour}`, x, 56);
+        }
+      }
     }
     function drawWeather(b) {
       if (b < 2 || !weatherData || weatherData.loading) return;
@@ -569,23 +492,23 @@
       const dateStr = `${weatherData.city} ${weatherData.temp_max}°/${weatherData.temp_min}°`;
       ctx.fillText(dateStr, 128, 10);
 
-      // Temperature (large)
-      ctx.font = 'bold 20px "Orbitron", "IBM Plex Mono", monospace';
+      // Temperature (large, shifted down to avoid overlap with time)
+      ctx.font = 'bold 18px "Orbitron", "IBM Plex Mono", monospace';
       ctx.fillStyle = gray(Math.min(textBrightness + 2, 15));
-      ctx.fillText(`${weatherData.temp}°`, 60, 32);
+      ctx.fillText(`${weatherData.temp}°`, 60, 38);
 
       // Weather condition
-      ctx.font = '10px "IBM Plex Mono", monospace';
+      ctx.font = '9px "IBM Plex Mono", monospace';
       ctx.fillStyle = gray(textBrightness);
-      ctx.fillText(weatherData.conditionLabel, 128, 30);
+      ctx.fillText(weatherData.conditionLabel, 128, 34);
 
       // Rain probability (right side)
-      ctx.font = '9px "IBM Plex Mono", monospace';
+      ctx.font = '8px "IBM Plex Mono", monospace';
       ctx.fillStyle = gray(textBrightness - 2);
       ctx.textAlign = 'right';
-      ctx.fillText(`降水 ${weatherData.rain_prob}%`, 248, 28);
+      ctx.fillText(`降水 ${weatherData.rain_prob}%`, 248, 32);
       if (weatherData.rain_amount > 0) {
-        ctx.fillText(`雨量 ${weatherData.rain_amount.toFixed(1)}mm`, 248, 40);
+        ctx.fillText(`雨量 ${weatherData.rain_amount.toFixed(1)}mm`, 248, 44);
       }
 
       // Bottom info
@@ -622,30 +545,42 @@
         brightness = Math.max(0, brightness - 0.5);
       } else if (mode === 'wake') {
         // 20:00-06:59: Star mode
-        // 07:00-19:59: Weather mode
-        if (hour >= 20 || hour < 7) {
-          // Night mode - stars + time
-          drawStars();
-          drawTime(Math.max(brightness, 5));
-          brightness = Math.min(15, brightness + 0.3);
+        // 07:00-19:59: 12-hour forecast
+        if (hour >= 18 || hour < 7) {
+          // Night mode - stars first, then time, fade out after 10s
+          if (starModeStartTime === 0) starModeStartTime = Date.now();
+          const elapsed = Date.now() - starModeStartTime;
+
+          // Stars: fade in first 3s, hold until 13s, fade out after
+          const starBrightness = elapsed < 3000 ? elapsed / 3000 * 12 :
+                                 elapsed > 13000 ? Math.max(0, 12 - (elapsed - 13000) / 2000 * 12) : 12;
+          drawStarsWithBrightness(starBrightness);
+
+          // Time: fade in from 2s-4s, hold until 10s, fade out 10s-12s
+          const timeBrightness = elapsed < 4000 ? Math.min(15, (elapsed - 2000) / 2000 * 15) :
+                                 elapsed < 10000 ? 15 :
+                                 Math.max(0, 15 - (elapsed - 10000) / 2000 * 15);
+          if (timeBrightness > 2) drawTime(timeBrightness);
         } else {
-          // Day mode - weather + time
-          if (!weatherData) fetchWeather();
-          drawWeather(brightness);
-          brightness = Math.min(15, brightness + 0.3);
+          // Day mode - 12-hour forecast
+          starModeStartTime = 0;
+          if (hourlyForecast.length === 0) fetchWeather();
+          drawDaytime(brightness);
         }
-      } else if (mode === 'weather') {
-        // Force weather display
-        if (!weatherData) fetchWeather();
-        drawWeather(brightness);
-        brightness = Math.min(15, brightness + 0.3);
       } else if (mode === 'star') {
-        drawStars();
-        drawTime(Math.max(brightness, 5));
-        brightness = Math.min(15, brightness + 0.3);
-      } else if (mode === 'hourly') {
-        drawHourly(brightness);
-        brightness = Math.min(15, brightness + 0.3);
+        if (starModeStartTime === 0) starModeStartTime = Date.now();
+        const elapsed = Date.now() - starModeStartTime;
+
+        // Stars: fade in first 3s, hold until 13s, fade out after
+        const starBrightness = elapsed < 3000 ? elapsed / 3000 * 12 :
+                               elapsed > 13000 ? Math.max(0, 12 - (elapsed - 13000) / 2000 * 12) : 12;
+        drawStarsWithBrightness(starBrightness);
+
+        // Time: fade in from 2s-4s, hold until 10s, fade out 10s-12s
+        const timeBrightness = elapsed < 4000 ? Math.min(15, (elapsed - 2000) / 2000 * 15) :
+                               elapsed < 10000 ? 15 :
+                               Math.max(0, 15 - (elapsed - 10000) / 2000 * 15);
+        if (timeBrightness > 2) drawTime(timeBrightness);
       } else if (mode === 'daytime') {
         drawDaytime(brightness);
         brightness = Math.min(15, brightness + 0.3);
@@ -674,6 +609,7 @@
 
     document.getElementById('btnSleep').addEventListener('click', () => {
       mode = 'sleep';
+      starModeStartTime = 0;
       status.textContent = '待机模式';
     });
 
@@ -681,31 +617,6 @@
       mode = 'star';
       brightness = 10;
       status.textContent = '星辰模式';
-    });
-
-    document.getElementById('btnWeather').addEventListener('click', async () => {
-      mode = 'weather';
-      weatherData = { loading: true };
-      await fetchWeather();
-      status.textContent = `${weatherData.city} ${weatherData.temp}° ${weatherData.conditionLabel} 降水${weatherData.rain_prob}%`;
-    });
-
-    document.getElementById('btnHourly').addEventListener('click', async () => {
-      if (hourlyForecast.length === 0) {
-        status.textContent = '加载中...';
-        await fetchWeather();
-      }
-      mode = 'hourly';
-      status.textContent = '12小时预报';
-    });
-
-    document.getElementById('btnDaytime').addEventListener('click', async () => {
-      if (hourlyForecast.length === 0) {
-        status.textContent = '加载中...';
-        await fetchWeather();
-      }
-      mode = 'daytime';
-      status.textContent = '日间天气 8:00-20:00';
     });
 
     // Keyboard: press any key to wake
@@ -716,6 +627,7 @@
 
     document.addEventListener('keyup', () => {
       mode = 'sleep';
+      starModeStartTime = 0;
       status.textContent = '待机模式';
     });
 
