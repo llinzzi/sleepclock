@@ -512,16 +512,19 @@
         ctx.fillText(`${h.hour}`, x, 54);
       }
 
+      // === CURRENT TIME (top right) ===
+      const currentTime = `${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')}`;
+      ctx.font = 'bold 10px "Orbitron", monospace';
+      ctx.textAlign = 'right';
+      ctx.fillStyle = gray(textBrightness);
+      ctx.fillText(currentTime, 252, 12);
+
       // === CURRENT WEATHER (bottom left) ===
       if (weatherData) {
-        ctx.font = 'bold 14px "Orbitron", monospace';
-        ctx.textAlign = 'left';
-        ctx.fillStyle = gray(textBrightness);
-        ctx.fillText(`${weatherData.temp}°`, 4, 62);
-
         ctx.font = '7px "IBM Plex Mono", monospace';
+        ctx.textAlign = 'left';
         ctx.fillStyle = gray(textBrightness - 3);
-        ctx.fillText(weatherData.conditionLabel, 40, 62);
+        ctx.fillText(weatherData.conditionLabel, 4, 62);
 
         // Rain now
         ctx.textAlign = 'right';
