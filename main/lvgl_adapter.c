@@ -5,14 +5,13 @@
 #include "driver/gpio.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#include "ui/ui.h"  // eez studio UI
 
 static const char *TAG = "LVGL_ADAPTER";
 static lv_display_t *g_disp = NULL;
 static uint8_t *g_i4_buffer = NULL;  // 静态I4缓冲区
 static uint8_t *g_framebuffer = NULL;  // L8帧缓冲区
-static bool ui_initialized = false;  // UI初始化标志
 static bool screen_dirty = false;  // 屏幕需要刷新标志
+static uint8_t *g_full_i4_buf = NULL;  // 全屏I4缓冲区
 
 // 函数声明
 static void lvgl_task(void *arg);
@@ -44,10 +43,10 @@ static void lvgl_flush_cb(lv_display_t *disp, const lv_area_t *area, uint8_t *px
             }
         }
         
-        // 设置显示区域
+        // SSD1322列地址 = 像素列数/4，每地址4像素
         ssd1322_send_cmd(0x15);
-        ssd1322_send_data((x_start / 4) + 0x1C);
-        ssd1322_send_data((x_end / 4) + 0x1C);
+        ssd1322_send_data((x_start / 4) & 0x3F);  // 列起始 (0-63)
+        ssd1322_send_data(((x_end / 4)) & 0x3F);  // 列结束
         
         ssd1322_send_cmd(0x75);
         ssd1322_send_data(y_start);
@@ -88,6 +87,13 @@ esp_err_t lvgl_adapter_init(void)
         ESP_LOGE(TAG, "Failed to allocate I4 buffer");
         return ESP_ERR_NO_MEM;
     }
+
+    // 分配全屏I4缓冲区用于直接刷新
+    g_full_i4_buf = heap_caps_malloc(LCD_H_RES * LCD_V_RES / 2, MALLOC_CAP_DMA);
+    if (!g_full_i4_buf) {
+        ESP_LOGE(TAG, "Failed to allocate full I4 buffer");
+        return ESP_ERR_NO_MEM;
+    }
     
     // 分配LVGL缓冲区（L8格式）
     size_t buf_size = LCD_H_RES * LCD_V_RES;
@@ -114,16 +120,9 @@ static void lvgl_task(void *arg)
     ESP_LOGI(TAG, "Starting LVGL task");
     while (1) {
         lv_timer_handler();
-        if (ui_initialized) {
-            ui_tick();  // eez UI tick
-        }
+        // 不调用 ui_tick()，因为 EEZ UI 未初始化
         vTaskDelay(pdMS_TO_TICKS(10));
     }
-}
-
-void lvgl_adapter_set_ui_ready(void)
-{
-    ui_initialized = true;
 }
 
 lv_display_t* lvgl_adapter_get_display(void)
@@ -136,6 +135,7 @@ uint8_t* lvgl_get_framebuffer(void)
     return g_framebuffer;
 }
 
+// LVGL绘制像素
 void lvgl_draw_pixel(int x, int y, uint8_t brightness) {
     if (x < 0 || x >= LCD_H_RES || y < 0 || y >= LCD_V_RES) return;
     if (brightness > 15) brightness = 15;
@@ -201,10 +201,40 @@ void lvgl_clear(uint8_t brightness) {
 }
 
 void lvgl_trigger_refresh(void) {
-    if (screen_dirty) {
-        // Force LVGL to redraw by calling lv_refr_now
-        lv_refr_now(g_disp);
-        screen_dirty = false;
+    if (!screen_dirty) return;
+    screen_dirty = false;
+
+    // 直接渲染全屏到SSD1322（绕过LVGL flush机制）
+    if (g_framebuffer && g_full_i4_buf) {
+        // L8转I4：每2个L8像素合并为1个I4字节
+        for (int y = 0; y < LCD_V_RES; y++) {
+            for (int x = 0; x < LCD_H_RES; x += 2) {
+                int src_idx = y * LCD_H_RES + x;
+                int dst_idx = y * (LCD_H_RES / 2) + (x / 2);
+                uint8_t p0 = g_framebuffer[src_idx] >> 4;      // 第1个像素，取高4位
+                uint8_t p1 = g_framebuffer[src_idx + 1] >> 4;  // 第2个像素，取高4位
+                g_full_i4_buf[dst_idx] = (p0 << 4) | p1;
+            }
+        }
+
+        // 设置显示区域为全屏 (256x64像素 = 64列 x 4像素/列)
+        ssd1322_send_cmd(0x15);
+        ssd1322_send_data(0x00);  // 列起始
+        ssd1322_send_data(0x3F);  // 列结束 (0x3F = 63, 64列)
+
+        ssd1322_send_cmd(0x75);
+        ssd1322_send_data(0x00);  // 行起始
+        ssd1322_send_data(0x3F);  // 行结束 (63)
+
+        ssd1322_send_cmd(0x5C); // Write RAM
+
+        gpio_set_level(PIN_NUM_DC, 1);
+
+        spi_transaction_t t = {
+            .length = LCD_H_RES * LCD_V_RES / 2 * 8,
+            .tx_buffer = g_full_i4_buf
+        };
+        spi_device_polling_transmit(ssd1322_get_spi_handle(), &t);
     }
 }
 
@@ -255,7 +285,7 @@ void lvgl_draw_text(int x, int y, const char *str, uint8_t font_size, uint8_t br
             char_idx = c - '0';
         } else if (c == ':') {
             char_idx = 10;
-        } else if (c == '°') {
+        } else if (c == 0xB0) {  // Degree symbol
             char_idx = 11;
         }
 

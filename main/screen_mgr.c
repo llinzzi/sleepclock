@@ -52,6 +52,16 @@ void screen_mgr_on_sleep(void) {
     brightness = 0;
 }
 
+void screen_mgr_toggle_mode(void) {
+    if (current_mode == SCREEN_SLEEP) {
+        screen_mgr_set_mode(SCREEN_STAR);
+    } else if (current_mode == SCREEN_STAR) {
+        screen_mgr_set_mode(SCREEN_WEATHER);
+    } else {
+        screen_mgr_set_mode(SCREEN_STAR);
+    }
+}
+
 uint32_t get_elapsed_ms(void) {
     return (xTaskGetTickCount() * portTICK_PERIOD_MS) - mode_start_time;
 }
@@ -128,7 +138,10 @@ void screen_mgr_update(uint32_t elapsed_ms) {
                     int min = (tv.tv_sec % 3600) / 60;
                     char time_str[8];
                     snprintf(time_str, sizeof(time_str), "%02d:%02d", hour, min);
-                    lvgl_draw_text(128, 32, time_str, 28, time_brightness, true);
+                    // Center time at x=128, font size 28
+                    int text_x = 128 - 56;  // Approximate centering for 5x7 scaled font
+                    int text_y = 32 - 14;   // Vertical center for 28px font
+                    lvgl_draw_text(text_x, text_y, time_str, 28, time_brightness, true);
                 }
 
                 brightness = (star_brightness > time_brightness) ? star_brightness : time_brightness;
@@ -157,6 +170,5 @@ void screen_mgr_update(uint32_t elapsed_ms) {
             break;
     }
 
-    // Trigger display refresh
-    lvgl_trigger_refresh();
+    // Note: ssd1322_flush_framebuffer() is called by main.c after this function
 }

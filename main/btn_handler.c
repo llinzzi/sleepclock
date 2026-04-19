@@ -52,12 +52,14 @@ btn_event_t btn_handler_poll(void) {
             if (btn_level == 0) {  // Button pressed (active low)
                 press_start_time = now;
                 btn_state = BTN_STATE_PRESSED;
+                ESP_LOGI(TAG, "Button pressed");
             }
             break;
 
         case BTN_STATE_PRESSED:
             if (btn_level == 1) {  // Button released
                 btn_state = BTN_STATE_IDLE;
+                ESP_LOGI(TAG, "Button short press - returning BTN_EVENT_PRESS");
                 return BTN_EVENT_PRESS;
             }
             if ((now - press_start_time) >= LONG_10S_MS) {

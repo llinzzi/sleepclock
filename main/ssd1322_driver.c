@@ -1,4 +1,5 @@
 #include "ssd1322_driver.h"
+#include "lvgl_adapter.h"
 #include "driver/gpio.h"
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
@@ -30,6 +31,46 @@ void ssd1322_send_data(uint8_t data)
 spi_device_handle_t ssd1322_get_spi_handle(void)
 {
     return g_spi;
+}
+
+esp_err_t ssd1322_flush_framebuffer(void)
+{
+    uint8_t *fb = lvgl_get_framebuffer();
+    if (!fb) return ESP_FAIL;
+
+    // L8转I4：每2个L8像素合并为1个I4字节
+    static uint8_t i4_buf[LCD_H_RES * LCD_V_RES / 2];
+    for (int y = 0; y < LCD_V_RES; y++) {
+        for (int x = 0; x < LCD_H_RES; x += 2) {
+            int src_idx = y * LCD_H_RES + x;
+            int dst_idx = y * (LCD_H_RES / 2) + (x / 2);
+            uint8_t p0 = fb[src_idx] >> 4;       // 第1个像素，取高4位
+            uint8_t p1 = fb[src_idx + 1] >> 4;  // 第2个像素，取高4位
+            i4_buf[dst_idx] = (p0 << 4) | p1;
+        }
+    }
+
+    // 设置显示区域为全屏 (256x64像素 = 64列地址 x 4像素 + 64行)
+    // 列地址 0x00-0x3F = 64组 x 4像素/组 = 256像素
+    ssd1322_send_cmd(0x15);
+    ssd1322_send_data(0x00);  // 列起始
+    ssd1322_send_data(0x3F);  // 列结束 (0x3F = 63, 64组)
+
+    ssd1322_send_cmd(0x75);
+    ssd1322_send_data(0x00);  // 行起始
+    ssd1322_send_data(0x3F);  // 行结束 (63, 64行)
+
+    ssd1322_send_cmd(0x5C);   // Write RAM
+
+    gpio_set_level(PIN_NUM_DC, 1);
+
+    spi_transaction_t t = {
+        .length = LCD_H_RES * LCD_V_RES / 2 * 8,
+        .tx_buffer = i4_buf
+    };
+    spi_device_polling_transmit(g_spi, &t);
+
+    return ESP_OK;
 }
 
 esp_err_t ssd1322_init(void)

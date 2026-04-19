@@ -1,0 +1,2 @@
+source /Users/zulin/Dev/sleepclock/build/bootloader/gdbinit/symbols
+source /Users/zulin/Dev/sleepclock/build/bootloader/gdbinit/connect

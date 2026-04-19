@@ -42,14 +42,14 @@ void lvgl_draw_circle(int x, int y, int radius, uint8_t brightness);
 void lvgl_draw_text(int x, int y, const char *str, uint8_t font_size, uint8_t brightness, bool bold);
 
 /**
- * @brief 清除屏幕
- */
-void lvgl_clear(uint8_t brightness);
-
-/**
  * @brief 获取帧缓冲区指针
  */
 uint8_t* lvgl_get_framebuffer(void);
+
+/**
+ * @brief 清除屏幕
+ */
+void lvgl_clear(uint8_t brightness);
 
 /**
  * @brief 触发屏幕刷新

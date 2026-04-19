@@ -9,8 +9,8 @@
 #define PIN_NUM_MOSI   10  // GPIO10: SPI_SDA -> SSD1322 SDI
 #define PIN_NUM_CLK    7   // GPIO7: SPI_SCK -> SSD1322 SCLK
 #define PIN_NUM_DC     8   // GPIO8: SPI_DC -> SSD1322 DC
-// SPI_CS 硬件接地，无需GPIO
-// SPI_RST 连接到 CHIP_PU 复位信号
+#define PIN_NUM_CS     -1  // SPI_CS 硬件接地，无需GPIO
+#define PIN_NUM_RST    20  // GPIO20: 连接到 CHIP_PU 复位信号
 
 // 显示参数
 #define LCD_H_RES      256
@@ -40,5 +40,11 @@ void ssd1322_send_data(uint8_t data);
  * @return SPI设备句柄
  */
 spi_device_handle_t ssd1322_get_spi_handle(void);
+
+/**
+ * @brief 将帧缓冲区渲染到SSD1322显示
+ * @return ESP_OK 成功，其他值失败
+ */
+esp_err_t ssd1322_flush_framebuffer(void);
 
 #endif // SSD1322_DRIVER_H

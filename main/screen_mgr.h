@@ -15,5 +15,6 @@ void screen_mgr_set_mode(screen_mode_t mode);
 void screen_mgr_update(uint32_t elapsed_ms);
 void screen_mgr_on_wake(void);
 void screen_mgr_on_sleep(void);
+void screen_mgr_toggle_mode(void);
 
 #endif // SCREEN_MGR_H

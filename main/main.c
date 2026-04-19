@@ -32,7 +32,7 @@ void app_main(void)
     // Initialize LVGL adapter
     ESP_ERROR_CHECK(lvgl_adapter_init());
 
-    // Initialize UI (EEZ Studio)
+    // Initialize UI (bypassing EEZ Studio UI)
     vTaskDelay(pdMS_TO_TICKS(100));
     ESP_ERROR_CHECK(ui_wrapper_init());
     vTaskDelay(pdMS_TO_TICKS(100));
@@ -49,9 +49,6 @@ void app_main(void)
     // Connect to WiFi for weather data
     wifi_connect();
 
-    // Force screen refresh
-    lv_refr_now(NULL);
-
     ESP_LOGI(TAG, "All initialized successfully");
 
     // Main loop - handle buttons and update screen
@@ -64,15 +61,18 @@ void app_main(void)
             btn_event_t event = btn_handler_poll();
 
             if (event == BTN_EVENT_PRESS) {
-                ESP_LOGI(TAG, "Button pressed - wake");
-                screen_mgr_on_wake();
+                ESP_LOGI(TAG, "BTN_EVENT_PRESS - toggling mode");
+                screen_mgr_on_wake();  // Wake up and show appropriate mode
             } else if (event == BTN_EVENT_LONG_3S) {
                 ESP_LOGI(TAG, "Button long 3s - sleep");
                 screen_mgr_on_sleep();
             }
 
-            // Update screen manager
+            // Update screen manager (renders to framebuffer)
             screen_mgr_update(now);
+
+            // Trigger direct display refresh
+            ssd1322_flush_framebuffer();
 
             last_update = now;
         }
